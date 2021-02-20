@@ -98,7 +98,7 @@ fi
 echo -e "\e[32mPrepare workspace for kernel build\e[0m"
 sudo make ARCH=arm64 mrproper -j$(($(nproc)-1)) && sudo make ARCH=arm64 tegra_defconfig -j$(($(nproc)-1))
 #Reuse existing module.symver
-sudo cp /usr/src/linux-headers-4.9.140-tegra-ubuntu18.04_aarch64/kernel-4.9/Module.symvers .
+sudo cp /usr/src/linux-headers-4.9.201-tegra-ubuntu18.04_aarch64/kernel-4.9/Module.symvers .
 
 echo -e "\e[32mUpdate the kernel tree to support HID IMU sensors\e[0m"
 sudo sed -i '/CONFIG_HID_SENSOR_ACCEL_3D/c\CONFIG_HID_SENSOR_ACCEL_3D=m' .config
@@ -109,7 +109,7 @@ sudo make ARCH=arm64 prepare modules_prepare  -j$(($(nproc)-1))
 echo -e "\e[32mApply Librealsense Kernel Patches\e[0m"
 sudo -s patch -p1 < ./LRS_Patches/01-realsense-camera-formats-L4T-4.9.patch
 sudo -s patch -p1 < ./LRS_Patches/02-realsense-metadata-L4T-4.9.patch
-sudo -s patch -p1 < ./LRS_Patches/03-realsense-hid-L4T-4.9.patch
+# sudo -s patch -p1 < ./LRS_Patches/03-realsense-hid-L4T-4.9.patch
 sudo -s patch -p1 < ./LRS_Patches/04-media-uvcvideo-mark-buffer-error-where-overflow.patch
 sudo -s patch -p1 < ./LRS_Patches/05-realsense-powerlinefrequency-control-fix.patch
 
