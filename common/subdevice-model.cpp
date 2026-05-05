@@ -1541,8 +1541,6 @@ namespace rs2
 
                 sensor_ptr->stop();
 
-                _options_invalidated = true;
-
                 queues.foreach([&](frame_queue& q)
                     {
                         frame f;
@@ -1550,6 +1548,9 @@ namespace rs2
                     });
 
                 sensor_ptr->close();
+
+                // Invalidate after close() so options whose read-only depends on is_opened() refresh correctly.
+                _options_invalidated = true;
             });
     }
 
