@@ -11,7 +11,7 @@ import logging
 log = logging.getLogger(__name__)
 
 pytestmark = [
-    pytest.mark.device("D555"), # Currently only D555 supports DDS configuration natively
+    pytest.mark.each_device("D555"), # Currently only D555 supports DDS configuration natively
 ]
 
 get_eth_config_opcode = 0xBB

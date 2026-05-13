@@ -24,7 +24,6 @@ _module_state = {}
 
 
 def test_wait_for_device_and_is_connected(test_device):
-    """device_hub: wait_for_device & is_connected"""
     dev, ctx = test_device
     hub = rs.device_hub(ctx)
     dev_from_hub = hub.wait_for_device()
@@ -34,7 +33,6 @@ def test_wait_for_device_and_is_connected(test_device):
 
 
 def test_detect_disconnect_after_hardware_reset(test_device):
-    """device_hub: detect disconnect after hardware_reset"""
     if not _module_state.get('basic_ok'):
         pytest.skip("prerequisite test_wait_for_device_and_is_connected failed")
 
@@ -59,15 +57,8 @@ def test_detect_disconnect_after_hardware_reset(test_device):
     check.is_true(caught_once, f"Failed to observe a disconnect in {MAX_TRIES} hardware reset attempt(s)")
     _module_state['disconnect_ok'] = True
 
-
-def test_wait_for_reconnection(test_device):
-    """device_hub: wait for reconnection"""
-    if not _module_state.get('disconnect_ok'):
-        pytest.skip("prerequisite test_detect_disconnect_after_hardware_reset failed")
-
-    dev, ctx = test_device
-    hub = rs.device_hub(ctx)
-    # Exiting the test will cause hub to disconnect port. We saw problems on CI when disconnecting like this when device is powering down/up so we wait for it to finish reset.
+    # Exiting the tests directly after the disconnection will cause hub to disconnect port.
+    # We had issues on CI disconnecting when device is powering down/up so we wait for it to finish reset.
     # (Unifi Hub stuck disconnecting port, D555 recovery OS -> domain set to 0)
     new_dev = hub.wait_for_device()
     check.is_true(new_dev is not None)

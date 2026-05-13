@@ -27,7 +27,7 @@ import logging
 log = logging.getLogger(__name__)
 
 pytestmark = [
-    pytest.mark.device("D457" if is_jetson_platform() else "D455"),
+    pytest.mark.each_device("D457" if is_jetson_platform() else "D455"), # Using device_each as not all Jetsons in CI have D457
 ]
 
 # Test configuration
