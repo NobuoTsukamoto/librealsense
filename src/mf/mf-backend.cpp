@@ -7,6 +7,7 @@
 #include "mf-backend.h"
 #include "mf-uvc.h"
 #include "mf-hid.h"
+#include "../win/win-helpers.h"  // cm_node
 #include <src/core/time-service.h>
 #include <src/platform/device-watcher.h>
 #include <src/platform/command-transfer.h>
@@ -15,8 +16,10 @@
 #include "../types.h"
 #include <mfapi.h>
 #include <chrono>
+#include <set>
 #include <Windows.h>
 #include <dbt.h>
+#include <devpkey.h>  // DEVPKEY_Device_Class
 #include <cctype> // std::tolower
 #include <rsutils/time/timer.h>
 
@@ -192,6 +195,64 @@ namespace librealsense
             return std::vector<mipi_device_info>();
         }
 
+        // Returns true if any USB composite device referenced by the current
+        // enumeration has an HID-class interface that Windows has not yet
+        // attached a child device-instance to. This is a generic signal that
+        // the OS is still in the middle of binding HID drivers for the
+        // composite (e.g., the HID Sensor Collection of a D4xx/D5xx IMU
+        // camera, which on Windows binds noticeably after the UVC interfaces
+        // of the same composite device). When this is true, the watcher
+        // defers its "device added" callback so that the SDK doesn't see a
+        // half-enumerated device (which would otherwise come up as a UVC
+        // device with no Motion Module and produce "No HID info provided,
+        // IMU is disabled" / "HID Motion Sensor Failure! bad optional
+        // access" before a second supersede event fixes it).
+        //
+        // This intentionally does NOT depend on PID lists - it asks the OS
+        // "is there an HID-class interface here that has no driver-attached
+        // child yet?" which is the underlying truth we are waiting on.
+        static bool hid_binding_in_progress( platform::backend_device_group const & curr )
+        {
+            // Each USB composite device shows up as the PARENT of any of its
+            // MI_xx interfaces. We discover composites via the UVC entries
+            // (every IMU-bearing camera also exposes UVC), walk up one node,
+            // then enumerate the composite's children looking for HID-class
+            // children with no sub-children.
+            std::set< DEVINST > visited_composites;
+            for( auto && uvc : curr.uvc_devices )
+            {
+                std::wstring path( uvc.id.begin(), uvc.id.end() );
+                cm_node iface = cm_node::from_device_path( path.c_str() );
+                if( ! iface.valid() )
+                    continue;
+                cm_node composite = iface.get_parent();
+                if( ! composite.valid() )
+                    continue;
+                if( ! visited_composites.insert( composite.get() ).second )
+                    continue;  // already checked this composite
+
+                cm_node child = composite.get_child();
+                while( child.valid() )
+                {
+                    // DEVPKEY_Device_Class is the human-readable class name
+                    // assigned by Windows ("HIDClass", "Camera", "USB", ...).
+                    // We only care about HID-class interface children of the
+                    // composite - those are where HID Sensor Collections (or
+                    // other HID device-instances) get instantiated.
+                    if( child.get_property( DEVPKEY_Device_Class ) == "HIDClass" )
+                    {
+                        // No grandchild => no HID device-instance attached
+                        // yet => Sensor API / WinUSB HID enum hasn't seen
+                        // it => SDK would get a partial enumeration.
+                        if( ! child.get_child().valid() )
+                            return true;
+                    }
+                    child = child.get_sibling();
+                }
+            }
+            return false;
+        }
+
         class win_event_device_watcher : public device_watcher
         {
         public:
@@ -241,6 +302,10 @@ namespace librealsense
 
             struct extra_data {
                 rsutils::time::timer _timer{ std::chrono::milliseconds( 100 ) };
+                // Set when an arrival/removal event has triggered _changed; used
+                // to enforce a maximum total deferral while waiting for HID
+                // drivers to finish binding (see hid_binding_in_progress).
+                std::chrono::steady_clock::time_point _first_event;
 
                 bool _stopped = true;
                 bool _changed = false;
@@ -279,14 +344,33 @@ namespace librealsense
                             platform::backend_device_group curr( _backend->query_uvc_devices(),
                                                                  _backend->query_usb_devices(),
                                                                  _backend->query_hid_devices() );
-                            if( list_changed( _last.uvc_devices, curr.uvc_devices )
-                                || list_changed( _last.usb_devices, curr.usb_devices )
-                                || list_changed( _last.hid_devices, curr.hid_devices ) )
+
+                            // Generic "wait for HID to finish binding" gate: if the
+                            // OS shows an HID-class USB interface that hasn't been
+                            // populated with a child device-instance yet, the bus
+                            // is still "settling" - re-arm the debounce and check
+                            // again on the next tick. Bounded by MAX_DEFERRAL so a
+                            // misbehaving HID driver (HID class advertised but
+                            // never bound) doesn't make the device invisible
+                            // forever.
+                            static constexpr auto MAX_DEFERRAL = std::chrono::milliseconds( 3000 );
+                            auto since_first = std::chrono::steady_clock::now() - _data._first_event;
+                            if( hid_binding_in_progress( curr ) && since_first < MAX_DEFERRAL )
                             {
-                                _callback( _last, curr );
-                                _last = curr;
+                                _data._timer.start();
+                                // Don't fire yet; fall through to sleep.
                             }
-                            _data._changed = false;
+                            else
+                            {
+                                if( list_changed( _last.uvc_devices, curr.uvc_devices )
+                                    || list_changed( _last.usb_devices, curr.usb_devices )
+                                    || list_changed( _last.hid_devices, curr.hid_devices ) )
+                                {
+                                    _callback( _last, curr );
+                                    _last = curr;
+                                }
+                                _data._changed = false;
+                            }
                         }
                         // Yield CPU resources, as this is required for connect/disconnect events only
                         std::this_thread::sleep_for( std::chrono::milliseconds( 50 ) );
@@ -329,6 +413,8 @@ namespace librealsense
                             break;
                         auto data = reinterpret_cast< extra_data * >(
                             GetWindowLongPtr( hWnd, GWLP_USERDATA ) );
+                        if( ! data->_changed )
+                            data->_first_event = std::chrono::steady_clock::now();
                         data->_changed = true;
                         data->_timer.start();
                         break;
@@ -340,6 +426,8 @@ namespace librealsense
                         if( p_hdr->dbch_devicetype != DBT_DEVTYP_DEVICEINTERFACE )
                             break;
                         auto data = reinterpret_cast<extra_data*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
+                        if( ! data->_changed )
+                            data->_first_event = std::chrono::steady_clock::now();
                         data->_changed = true;
                         data->_timer.start();
                     }
