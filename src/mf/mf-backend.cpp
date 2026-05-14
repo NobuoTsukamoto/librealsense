@@ -196,28 +196,41 @@ namespace librealsense
         }
 
         // Returns true if any USB composite device referenced by the current
-        // enumeration has an HID-class interface that Windows has not yet
-        // attached a child device-instance to. This is a generic signal that
-        // the OS is still in the middle of binding HID drivers for the
-        // composite (e.g., the HID Sensor Collection of a D4xx/D5xx IMU
-        // camera, which on Windows binds noticeably after the UVC interfaces
-        // of the same composite device). When this is true, the watcher
-        // defers its "device added" callback so that the SDK doesn't see a
-        // half-enumerated device (which would otherwise come up as a UVC
-        // device with no Motion Module and produce "No HID info provided,
-        // IMU is disabled" / "HID Motion Sensor Failure! bad optional
-        // access" before a second supersede event fixes it).
+        // enumeration has an HID-class interface that hasn't been fully
+        // surfaced yet - either the CM tree hasn't attached a child device-
+        // instance under the HID interface, OR the Sensor API hasn't yet
+        // returned a hid_device_info matching that composite's unique_id.
+        // This is a generic signal that the OS is still in the middle of
+        // binding HID drivers for the composite (e.g., the HID Sensor
+        // Collection of a D4xx/D5xx IMU camera, which on Windows binds
+        // noticeably after the UVC interfaces of the same composite device).
+        // When this is true, the watcher defers its "device added" callback
+        // so that the SDK doesn't see a half-enumerated device (which would
+        // otherwise come up as a UVC device with no Motion Module and
+        // produce "No HID info provided, IMU is disabled" / "HID Motion
+        // Sensor Failure! bad optional access" before a second supersede
+        // event fixes it).
         //
         // This intentionally does NOT depend on PID lists - it asks the OS
-        // "is there an HID-class interface here that has no driver-attached
-        // child yet?" which is the underlying truth we are waiting on.
+        // and the Sensor API "is there an HID-class interface here that
+        // hasn't been fully enumerated yet?" which is the underlying truth
+        // we are waiting on.
         static bool hid_binding_in_progress( platform::backend_device_group const & curr )
         {
+            // Collect the composite unique_ids that the Sensor API has
+            // already surfaced HID entries for. query_hid_devices() returns
+            // hid_device_info with unique_id == composite parent UID (see
+            // mf-hid.cpp foreach_hid_device), the same key UVC interfaces
+            // use, so a direct set lookup is enough.
+            std::set< std::string > sensor_api_uids;
+            for( auto && h : curr.hid_devices )
+                sensor_api_uids.insert( h.unique_id );
+
             // Each USB composite device shows up as the PARENT of any of its
             // MI_xx interfaces. We discover composites via the UVC entries
             // (every IMU-bearing camera also exposes UVC), walk up one node,
             // then enumerate the composite's children looking for HID-class
-            // children with no sub-children.
+            // children.
             std::set< DEVINST > visited_composites;
             for( auto && uvc : curr.uvc_devices )
             {
@@ -231,6 +244,7 @@ namespace librealsense
                 if( ! visited_composites.insert( composite.get() ).second )
                     continue;  // already checked this composite
 
+                bool has_hid_class_child = false;
                 cm_node child = composite.get_child();
                 while( child.valid() )
                 {
@@ -241,14 +255,23 @@ namespace librealsense
                     // other HID device-instances) get instantiated.
                     if( child.get_property( DEVPKEY_Device_Class ) == "HIDClass" )
                     {
+                        has_hid_class_child = true;
                         // No grandchild => no HID device-instance attached
-                        // yet => Sensor API / WinUSB HID enum hasn't seen
-                        // it => SDK would get a partial enumeration.
+                        // yet at the CM-tree level => still binding.
                         if( ! child.get_child().valid() )
                             return true;
                     }
                     child = child.get_sibling();
                 }
+
+                // CM tree shows all HID-class children have grandchildren,
+                // but the Sensor API runs on its own thread and may not have
+                // re-enumerated yet. If the composite has HID-class
+                // interfaces but the Sensor API still returns no HID entry
+                // for this composite's unique_id, we're between "CM tree
+                // ready" and "Sensor API ready" - keep waiting.
+                if( has_hid_class_child && sensor_api_uids.count( uvc.unique_id ) == 0 )
+                    return true;
             }
             return false;
         }
