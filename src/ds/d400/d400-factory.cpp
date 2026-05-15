@@ -1166,7 +1166,10 @@ namespace librealsense
         {
             LOG_ERROR( rsutils::string::from() << "Failed to create device for PID 0x" << std::hex << std::setw( 4 )
                                                << std::setfill( '0' ) << (int)pid << "! (" << e.what() << ")" );
-            // Create a device with partial capabilities instead of failing
+            // Create a device with partial capabilities instead of failing,
+            // but only if the caller opted in via `partial-device-allowed`.
+            if( ! ds::is_partial_device_allowed( get_context() ) )
+                throw;
             return std::make_shared< rs400_device >( dev_info, register_device_notifications );
         }
     }

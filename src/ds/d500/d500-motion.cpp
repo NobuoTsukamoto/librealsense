@@ -11,8 +11,10 @@
 #include <cstddef>
 
 #include <src/metadata.h>
+#include <src/context.h>
 #include "ds/ds-timestamp.h"
 #include "ds/ds-options.h"
+#include "ds/ds-private.h"
 #include "d500-info.h"
 #include "stream.h"
 #include "proc/motion-transform.h"
@@ -78,6 +80,8 @@ namespace librealsense
             auto serial = get_info( RS2_CAMERA_INFO_SERIAL_NUMBER );
             LOG_ERROR( "Device Name : " << device_name << " Serial : " << serial
                 << " HID Motion Sensor Failure! "  << e.what() );
+            if( ! ds::is_partial_device_allowed( dev_info->get_context() ) )
+                throw;
         }
 
     }
