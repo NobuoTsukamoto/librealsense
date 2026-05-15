@@ -82,6 +82,7 @@ namespace librealsense
             LOG_ERROR( device_name << " #" << serial << " - HID Motion Sensor Failure! " << e.what() );
             if( ! ds::is_partial_device_allowed( dev_info->get_context() ) )
                 throw;
+            LOG_WARNING( device_name << " #" << serial << " - continuing as partial device (partial-device-allowed=true)" );
         }
 
     }

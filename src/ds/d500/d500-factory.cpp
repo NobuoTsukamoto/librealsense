@@ -328,6 +328,8 @@ public:
             // but only if the caller opted in via `partial-device-allowed`.
             if( ! ds::is_partial_device_allowed( get_context() ) )
                 throw;
+            LOG_WARNING( "PID 0x" << std::hex << std::setw( 4 ) << std::setfill( '0' ) << (int)pid
+                                  << " - falling back to partial device (partial-device-allowed=true)" );
             return std::make_shared< rs500_device >( dev_info );
         }
     }
