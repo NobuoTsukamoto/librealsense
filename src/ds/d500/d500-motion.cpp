@@ -29,6 +29,8 @@ namespace librealsense
 
     rs2_motion_device_intrinsic d500_motion::get_motion_intrinsics(rs2_stream stream) const
     {
+        if( _has_motion_module_failed )
+            throw std::runtime_error( "Motion module is not available on this device" );
         return _ds_motion_common->get_motion_intrinsics(stream);
     }
 
