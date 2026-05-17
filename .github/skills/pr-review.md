@@ -24,6 +24,16 @@ Every PR description starts with a TL;DR (1–2 sentences stating the user-visib
 
 Keep the TL;DR jargon-free. Put tables (behavior change, latency, benchmarks) in the body, never in the TL;DR.
 
+If you **know** which Jira ticket the PR is tracking (the user told you, or you opened the ticket yourself this session), append a `Tracked on [RSDEV-1234]` line right after the TL;DR — bare text, no link:
+
+```markdown
+**TL;DR:** <1-2 sentences>
+
+Tracked on [RSDEV-1234]
+```
+
+Only add this line when you are sure. If you only suspect a ticket is related, ask the user before adding it — never guess.
+
 ## Before Every Push — Description Audit
 
 Re-read the PR description before `git push`. If any concrete detail in the description (iteration counts, timeouts, file paths, marker lists, behavior tables, referenced PR numbers) no longer matches what's actually on the branch, update the description in the same push (`gh pr edit <num> --body ...`).
