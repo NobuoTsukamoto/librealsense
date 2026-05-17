@@ -139,10 +139,12 @@ namespace librealsense
             _has_motion_module_failed = true;
             auto device_name = get_info( RS2_CAMERA_INFO_NAME );
             auto serial = get_info( RS2_CAMERA_INFO_SERIAL_NUMBER );
-            LOG_ERROR( device_name << " #" << serial << " - Base Motion Sensor Failure! " << e.what() );
             if( ! ds::is_partial_device_allowed( dev_info->get_context() ) )
+            {
+                LOG_ERROR( device_name << " #" << serial << " - Base Motion Sensor Failure! " << e.what() );
                 throw;
-            LOG_WARNING( device_name << " #" << serial << " - continuing as partial device (partial-device-allowed=true)" );
+            }
+            LOG_WARNING( device_name << " #" << serial << " - Base Motion Sensor Failure (continuing as partial device): " << e.what() );
         }
 
     }
@@ -187,10 +189,12 @@ namespace librealsense
             _has_motion_module_failed = true;
             auto device_name = get_info( RS2_CAMERA_INFO_NAME );
             auto serial = get_info( RS2_CAMERA_INFO_SERIAL_NUMBER );
-            LOG_ERROR( device_name << " #" << serial << " - HID Motion Sensor Failure! " << e.what() );
             if( ! ds::is_partial_device_allowed( dev_info->get_context() ) )
+            {
+                LOG_ERROR( device_name << " #" << serial << " - HID Motion Sensor Failure! " << e.what() );
                 throw;
-            LOG_WARNING( device_name << " #" << serial << " - continuing as partial device (partial-device-allowed=true)" );
+            }
+            LOG_WARNING( device_name << " #" << serial << " - HID Motion Sensor Failure (continuing as partial device): " << e.what() );
         }
     }
 
@@ -257,7 +261,12 @@ namespace librealsense
             _has_motion_module_failed = true;
             auto device_name = get_info( RS2_CAMERA_INFO_NAME );
             auto serial = get_info( RS2_CAMERA_INFO_SERIAL_NUMBER );
-            LOG_ERROR( device_name << " #" << serial << " - UVC Motion Sensor Failure! " << e.what() );
+            if( ! ds::is_partial_device_allowed( dev_info->get_context() ) )
+            {
+                LOG_ERROR( device_name << " #" << serial << " - UVC Motion Sensor Failure! " << e.what() );
+                throw;
+            }
+            LOG_WARNING( device_name << " #" << serial << " - UVC Motion Sensor Failure (continuing as partial device): " << e.what() );
         }
 
     }
