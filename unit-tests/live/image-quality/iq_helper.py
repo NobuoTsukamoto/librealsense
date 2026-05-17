@@ -225,6 +225,8 @@ def make_depth_filter_chain():
 #        so loose — but not so loose that a pure color passes for a muted one.
 #   val: brightness. Loose because brightness is what shifts most across rigs and
 #        times of day; this is the axis that absorbs illumination changes.
+#   rgb: per-channel fallback for achromatic samples only (gray/black/white) where
+#        hue is undefined and HSV S is dominated by sensor noise.
 TOLERANCE = {'hue': 10, 'sat': 70, 'val': 70, 'rgb': 70}
 ACHROMATIC_S = 40       # expected S below this → treat as gray/white/black
 
