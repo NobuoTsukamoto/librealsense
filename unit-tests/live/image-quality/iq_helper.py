@@ -237,11 +237,12 @@ def is_color_close(actual, expected):
             and val_diff <= TOLERANCE['val'])
 
 
-_snapshot_saved = False
+_snapshot_saved = set()
 
 def save_failure_snapshot( test_file, pipeline, annotated_image=None ):
     """
-    Save a single failure snapshot per test run (first call wins).
+    Save one failure snapshot per test file (first call per test wins). When
+    multiple IQ tests fail in the same run, each gets its own snapshot.
     If *annotated_image* is provided it is saved directly; otherwise a raw
     frame is grabbed from the still-running *pipeline* as a fallback
     (useful for page-detection failures).
@@ -250,8 +251,8 @@ def save_failure_snapshot( test_file, pipeline, annotated_image=None ):
     :param pipeline:         an active ``rs.pipeline`` (for the raw-frame fallback)
     :param annotated_image:  optional pre-built debug image (numpy array)
     """
-    global _snapshot_saved
-    if _snapshot_saved:
+    name = os.path.basename( test_file ).replace( '.py', '' )
+    if name in _snapshot_saved:
         return
 
     image = annotated_image
@@ -264,7 +265,6 @@ def save_failure_snapshot( test_file, pipeline, annotated_image=None ):
     if image is None:
         return
 
-    name = os.path.basename( test_file ).replace( '.py', '' )
     try:
         dev_name = pipeline.get_active_profile().get_device().get_info( rs.camera_info.name ).split()[-1]
         filename = f"{name}_{dev_name}.png"
@@ -275,4 +275,4 @@ def save_failure_snapshot( test_file, pipeline, annotated_image=None ):
         filename = os.path.join( logdir, filename )
     cv2.imwrite( filename, image )
     log.i( f"Saved failure snapshot: {filename}" )
-    _snapshot_saved = True
+    _snapshot_saved.add( name )
