@@ -118,6 +118,9 @@ namespace rs2
 
         bool const is_rgb_camera = s->is< color_sensor >();
 
+        // MinZ must run before get_recommended_filters() (decimation, spatial, temporal…).
+        // Decimation halves depth resolution while leaving IR unchanged; the mismatch would
+        // trigger the resolution guard in min_z_depth_improver::apply() and silently skip MinZ.
 #ifdef BUILD_WITH_MINZ
         if( !is_rgb_camera && s->supports( RS2_OPTION_STEREO_BASELINE ) )
         {
@@ -127,21 +130,7 @@ namespace rs2
                 [block]( rs2::frame f ) { return block->process( f ); },
                 error_message, false );
 
-            // D405 (0B5B) and D401 (ABCC): very short baseline, not compatible with MinZ algorithm
-            static constexpr const char * PID_D405 = "0B5B";
-            static constexpr const char * PID_D401 = "ABCC";
-
-            std::string pid;
-            if( s->supports( RS2_CAMERA_INFO_PRODUCT_ID ) )
-                pid = s->get_info( RS2_CAMERA_INFO_PRODUCT_ID );
-            bool unsupported_model = ( pid == PID_D405 || pid == PID_D401 );
-
-            if( unsupported_model )
-            {
-                model->available = []() { return false; };
-                model->unavailable_tooltip = "Not supported on this camera model";
-            }
-            else if( !rsutils::rs2_is_cuda_available() )
+            if( !rsutils::rs2_is_cuda_available() )
             {
                 model->available = []() { return false; };
                 model->unavailable_tooltip = "MinZ requires CUDA (not detected on this system)";
