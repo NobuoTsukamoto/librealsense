@@ -118,56 +118,6 @@ namespace rs2
 
         bool const is_rgb_camera = s->is< color_sensor >();
 
-        for (auto&& f : s->get_recommended_filters())
-        {
-            auto shared_filter = std::make_shared<filter>(f);
-            auto model = std::make_shared<processing_block_model>(
-                this, shared_filter->get_info(RS2_CAMERA_INFO_NAME), shared_filter,
-                [=](rs2::frame f) { return shared_filter->process(f); }, error_message);
-
-            if (shared_filter->is<hole_filling_filter>())
-                model->enable(false);
-
-            if (shared_filter->is<sequence_id_filter>())
-                model->enable(false);
-
-            if (shared_filter->is<decimation_filter>())
-            {
-                if (is_rgb_camera)
-                    model->enable(false);
-            }
-
-            if( shared_filter->is< rotation_filter >() )
-                model->enable( false ); 
-
-            if (shared_filter->is<threshold_filter>())
-            {
-                if (s->supports(RS2_CAMERA_INFO_PRODUCT_ID))
-                {
-                    // using short range for D405
-                    std::string device_pid = s->get_info(RS2_CAMERA_INFO_PRODUCT_ID);
-                    if (device_pid == "0B5B")
-                    {
-                        std::string error_msg;
-                        auto threshold_pb = shared_filter->as<threshold_filter>();
-                        threshold_pb.set_option(RS2_OPTION_MIN_DISTANCE, SHORT_RANGE_MIN_DISTANCE);
-                        threshold_pb.set_option(RS2_OPTION_MAX_DISTANCE, SHORT_RANGE_MAX_DISTANCE);
-                    }
-                }
-                model->enable( false ); 
-            }
-
-            if (shared_filter->is<hdr_merge>())
-            {
-                // processing block will be skipped if the requested option is not supported
-                auto supported_options = s->get_supported_options();
-                if (std::find(supported_options.begin(), supported_options.end(), RS2_OPTION_SEQUENCE_ID) == supported_options.end())
-                    continue;
-            }
-
-            post_processing.push_back(model);
-        }
-
 #ifdef BUILD_WITH_MINZ
         if( !is_rgb_camera && s->supports( RS2_OPTION_STEREO_BASELINE ) )
         {
@@ -240,6 +190,56 @@ namespace rs2
             post_processing.push_back( model );
         }
 #endif
+
+        for (auto&& f : s->get_recommended_filters())
+        {
+            auto shared_filter = std::make_shared<filter>(f);
+            auto model = std::make_shared<processing_block_model>(
+                this, shared_filter->get_info(RS2_CAMERA_INFO_NAME), shared_filter,
+                [=](rs2::frame f) { return shared_filter->process(f); }, error_message);
+
+            if (shared_filter->is<hole_filling_filter>())
+                model->enable(false);
+
+            if (shared_filter->is<sequence_id_filter>())
+                model->enable(false);
+
+            if (shared_filter->is<decimation_filter>())
+            {
+                if (is_rgb_camera)
+                    model->enable(false);
+            }
+
+            if( shared_filter->is< rotation_filter >() )
+                model->enable( false );
+
+            if (shared_filter->is<threshold_filter>())
+            {
+                if (s->supports(RS2_CAMERA_INFO_PRODUCT_ID))
+                {
+                    // using short range for D405
+                    std::string device_pid = s->get_info(RS2_CAMERA_INFO_PRODUCT_ID);
+                    if (device_pid == "0B5B")
+                    {
+                        std::string error_msg;
+                        auto threshold_pb = shared_filter->as<threshold_filter>();
+                        threshold_pb.set_option(RS2_OPTION_MIN_DISTANCE, SHORT_RANGE_MIN_DISTANCE);
+                        threshold_pb.set_option(RS2_OPTION_MAX_DISTANCE, SHORT_RANGE_MAX_DISTANCE);
+                    }
+                }
+                model->enable( false );
+            }
+
+            if (shared_filter->is<hdr_merge>())
+            {
+                // processing block will be skipped if the requested option is not supported
+                auto supported_options = s->get_supported_options();
+                if (std::find(supported_options.begin(), supported_options.end(), RS2_OPTION_SEQUENCE_ID) == supported_options.end())
+                    continue;
+            }
+
+            post_processing.push_back(model);
+        }
 
         for (auto&& f : s->query_embedded_filters())
         {
