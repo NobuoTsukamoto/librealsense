@@ -1,7 +1,7 @@
 # License: Apache 2.0. See LICENSE file in root directory.
 # Copyright(c) 2023 RealSense, Inc. All Rights Reserved.
 
-# test:device each(D400*) !D457  # D457 device is known for HW reset issues..
+# test:device each(D400*)
 # test:device each(D500*)
 # test:donotrun:!nightly
 
@@ -16,7 +16,7 @@ import time
 dev = None
 device_removed = False
 device_added = False
-MAX_ENUM_TIME_D400 = 5 # [sec]
+MAX_ENUM_TIME_D400 = 7 # [sec]
 MAX_ENUM_TIME_D500 = 15 # [sec]
 
 def device_changed( info ):

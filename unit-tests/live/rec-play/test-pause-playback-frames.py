@@ -2,10 +2,10 @@
 # Copyright(c) 2021 RealSense, Inc. All Rights Reserved.
 
 
-#test:device D400* !D457
-#test:device D585S
-# Running nightly as this tests specific bug fix in a code that is seldom touched, no need to run for each push.
-# test:donotrun:!nightly
+#test:device D400*
+#test:device D500*
+# Running weekly as this tests specific bug fix in a code that is seldom touched, no need to run for each push.
+# test:donotrun:!weekly
 
 # Objective:
 #
@@ -25,7 +25,7 @@ from playback_helper import PlaybackStatusVerifier
 # (requires that no files are being held open inside this directory. Important to not keep any handle open to a file
 # in this directory, any handle as such must be set to None)
 temp_dir = tempfile.TemporaryDirectory( prefix='recordings_' )
-file_name = temp_dir.name + os.sep + 'rec.bag'
+file_name = temp_dir.name + os.sep + 'rec.db3'
 
 stop_detected = False
 STREAMING_DURATION = 3

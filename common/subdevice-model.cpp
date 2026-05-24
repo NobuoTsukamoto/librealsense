@@ -399,6 +399,13 @@ namespace rs2
         _destructing = true;
         try
         {
+            wait_for_stop();
+        }
+        catch( ... )
+        {
+        }
+        try
+        {
             s->on_options_changed( []( const options_list & list ) {} );
         }
         catch( ... )
@@ -1335,8 +1342,11 @@ namespace rs2
 
     bool subdevice_model::is_multiple_resolutions_supported() const
     {
-        std::string product_line = dev.get_info(RS2_CAMERA_INFO_PRODUCT_LINE);
-        std::string sensor_name = s->get_info(RS2_CAMERA_INFO_NAME);
+        if( !dev.supports( RS2_CAMERA_INFO_PRODUCT_LINE ) || !s->supports( RS2_CAMERA_INFO_NAME ) )
+            return false;
+
+        std::string product_line = dev.get_info( RS2_CAMERA_INFO_PRODUCT_LINE );
+        std::string sensor_name = s->get_info( RS2_CAMERA_INFO_NAME );
 
         return product_line == "D500" && sensor_name == "Stereo Module";
     }
@@ -1471,11 +1481,32 @@ namespace rs2
         return results;
     }
 
+    // Move-and-wait pattern: the first caller that enters takes ownership of the
+    // future via std::move, so a concurrent second caller sees an invalid future
+    // and returns immediately.  All current call sites (destructor, play(),
+    // fw-update) are mutually exclusive flows, so at most one thread waits on
+    // the background stop at any given time.
+    //
+    // NOTE: exceptions from the background stop propagate through the future
+    // and are re-thrown here.  Callers that must not throw (e.g. destructor)
+    // are responsible for their own try/catch around this call.
+    void subdevice_model::wait_for_stop()
+    {
+        std::future< void > local;
+        {
+            std::lock_guard< std::mutex > lock(_stop_mutex);
+            local = std::move(_stop_future);
+        }
+        if (local.valid())
+            local.get();
+    }
+
     void subdevice_model::stop(std::shared_ptr<notifications_model> not_model)
     {
         if (not_model)
             not_model->add_log("Stopping streaming");
 
+        // --- Immediate UI state (synchronous) ---
         streaming = false;
         _pause = false;
 
@@ -1496,17 +1527,31 @@ namespace rs2
             viewer.disable_measurements();
         }
 
-        s->stop();
+        // --- Heavy operations (background) ---
+        // Chain with any prior pending stop without blocking the caller:
+        // move the old future into the lambda so it waits internally.
+        std::lock_guard< std::mutex > lock(_stop_mutex);
+        auto prev_stop = std::move(_stop_future);
 
-        _options_invalidated = true;
-
-        queues.foreach([&](frame_queue& q)
+        auto sensor_ptr = s;
+        _stop_future = std::async(std::launch::async, [this, sensor_ptr, prev_stop = std::move(prev_stop)]() mutable
             {
-                frame f;
-                while (q.poll_for_frame(&f));
-            });
+                if (prev_stop.valid())
+                    prev_stop.get();
 
-        s->close();
+                sensor_ptr->stop();
+
+                queues.foreach([&](frame_queue& q)
+                    {
+                        frame f;
+                        while (q.poll_for_frame(&f));
+                    });
+
+                sensor_ptr->close();
+
+                // Invalidate after close() so options whose read-only depends on is_opened() refresh correctly.
+                _options_invalidated = true;
+            });
     }
 
     bool subdevice_model::is_paused() const
@@ -1588,6 +1633,7 @@ namespace rs2
 
     void subdevice_model::play(const std::vector<stream_profile>& profiles, viewer_model& viewer, std::shared_ptr<rs2::asynchronous_syncer> syncer)
     {
+        wait_for_stop();
         avoid_streaming_on_embedded_filters_not_matching_configuration();
         set_extrinsics_from_depth_if_needed();
 

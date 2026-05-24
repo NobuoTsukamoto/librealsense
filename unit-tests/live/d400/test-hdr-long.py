@@ -4,13 +4,25 @@
 ######################################
 # This set of tests is valid for any device that supports the HDR feature #
 ######################################
-
 # test:device D400*
 # test:donotrun:!nightly
 
 import pyrealsense2 as rs
 from rspy import test, log
 import time
+import pyrsutils as rsutils
+
+device, ctx = test.find_first_device_or_exit()
+
+if not device.supports(rs.camera_info.firmware_version):
+    log.i("Device does not support firmware version info, skipping test...")
+    test.print_results_and_exit()
+
+fw_version = rsutils.version(device.get_info(rs.camera_info.firmware_version))
+if fw_version < rsutils.version(5, 17, 2, 11):
+    log.i(f"FW version {fw_version} is below required 5.17.2.11, skipping test...")
+    test.print_results_and_exit()
+
 
 def retry_on_exception(func, max_retries=10):
     """
@@ -343,6 +355,7 @@ def hdr_streaming_checking_sequence_id():
 
         pipe.stop()
         depth_sensor.set_option(rs.option.hdr_enabled, 0)  # disable hdr before next tests
+        test.check(depth_sensor.get_option(rs.option.hdr_enabled) == 0)
 
 
 # CHECKING SEQUENCE ID WHILE STREAMING
@@ -372,6 +385,7 @@ def emitter_on_off_check_sequence_id():
 
         pipe.stop()
         depth_sensor.set_option(rs.option.emitter_on_off, 0)  # disable emitter before next tests
+        test.check(depth_sensor.get_option(rs.option.emitter_on_off) == 0)
 
 
 with test.closure("Emitter on/off - checking sequence id"):
